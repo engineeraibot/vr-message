@@ -120,7 +120,7 @@ function onHandResults(results) {
                 const p = new THREE.Vector3(
                     (l.x - 0.5) * 2.0,
                     (0.5 - l.y) * 1.5,
-                    -l.z * 2.0 - 0.6
+                    -l.z * 2.0 - 1.0
                 );
                 points.push(p);
                 handMarkers[h][i].position.copy(p);
@@ -308,14 +308,14 @@ function animate() {
 
             if (leftArrow) {
                 leftArrow.getWorldPosition(arrowPos);
-                if (tipPos.distanceTo(arrowPos) < 0.2) {
+                if (tipPos.distanceTo(arrowPos) < 0.15) {
                     leftHovering = true;
                 }
             }
 
             if (rightArrow) {
                 rightArrow.getWorldPosition(arrowPos);
-                if (tipPos.distanceTo(arrowPos) < 0.2) {
+                if (tipPos.distanceTo(arrowPos) < 0.15) {
                     rightHovering = true;
                 }
             }
