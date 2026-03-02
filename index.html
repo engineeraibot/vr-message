@@ -57,6 +57,7 @@ let leftLoader, rightLoader;
 const tipPos = new THREE.Vector3();
 const arrowPos = new THREE.Vector3();
 const scratchVec = new THREE.Vector3();
+const scratchVec2 = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 
@@ -210,6 +211,9 @@ function init() {
         document.getElementById('enterVR').style.display = 'none';
     };
 
+    window.THREE = THREE;
+    window.__vr_data = { scene, camera, renderer, leftArrow, rightArrow, handMarkers };
+
     window.addEventListener('resize', onResize);
     renderer.setAnimationLoop(animate);
 }
@@ -316,14 +320,15 @@ function animate() {
     let leftHovering = false;
     let rightHovering = false;
 
+    scene.updateMatrixWorld(true);
+
     for (let h = 0; h < 2; h++) {
         if (handMarkers[h] && handMarkers[h][8] && handMarkers[h][8].visible) {
             handMarkers[h][8].getWorldPosition(tipPos);
 
-            // Project tipPos to NDC
-            scratchVec.copy(tipPos).project(camera);
-            ndc.set(scratchVec.x, scratchVec.y);
-            raycaster.setFromCamera(ndc, camera);
+            camera.getWorldPosition(scratchVec);
+            scratchVec2.subVectors(tipPos, scratchVec).normalize();
+            raycaster.set(scratchVec, scratchVec2);
 
             const targets = [];
             if (leftArrow) targets.push(leftArrow);
