@@ -54,6 +54,8 @@ let lastInteractionTime = 0;
 let leftHoverStartTime = 0;
 let rightHoverStartTime = 0;
 let leftLoader, rightLoader;
+const tipPos = new THREE.Vector3();
+const arrowPos = new THREE.Vector3();
 
 const HAND_CONNECTIONS = [
     [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
@@ -301,56 +303,73 @@ function animate() {
     let rightHovering = false;
 
     for (let h = 0; h < 2; h++) {
-        if (handMarkers[h] && handMarkers[h][8].visible) {
-            const tipPos = new THREE.Vector3();
+        if (handMarkers[h] && handMarkers[h][8] && handMarkers[h][8].visible) {
             handMarkers[h][8].getWorldPosition(tipPos);
 
-            const leftPos = new THREE.Vector3();
-            leftArrow.getWorldPosition(leftPos);
-            if (tipPos.distanceTo(leftPos) < 0.15) {
-                leftHovering = true;
+            if (leftArrow) {
+                leftArrow.getWorldPosition(arrowPos);
+                if (tipPos.distanceTo(arrowPos) < 0.2) {
+                    leftHovering = true;
+                }
             }
 
-            const rightPos = new THREE.Vector3();
-            rightArrow.getWorldPosition(rightPos);
-            if (tipPos.distanceTo(rightPos) < 0.15) {
-                rightHovering = true;
+            if (rightArrow) {
+                rightArrow.getWorldPosition(arrowPos);
+                if (tipPos.distanceTo(arrowPos) < 0.2) {
+                    rightHovering = true;
+                }
             }
         }
     }
 
-    if (leftHovering) {
-        if (leftHoverStartTime === 0) leftHoverStartTime = now;
-        const progress = Math.min((now - leftHoverStartTime) / 1000, 1);
-        updateLoader(leftLoader, progress);
-        leftLoader.visible = true;
+    if (leftHovering && leftLoader) {
+        if (leftHoverStartTime === 0) {
+            leftHoverStartTime = now;
+        }
 
-        if (progress >= 1 && now - lastInteractionTime > 500) {
-            currentIndex = (currentIndex - 1 + messages.length) % messages.length;
-            updateText();
-            lastInteractionTime = now;
-            leftHoverStartTime = now + 1000000; // prevent re-trigger
+        if (leftHoverStartTime > 0) {
+            const elapsed = now - leftHoverStartTime;
+            const progress = Math.min(elapsed / 1000, 1);
+            updateLoader(leftLoader, progress);
+            leftLoader.visible = true;
+
+            if (progress >= 1 && now - lastInteractionTime > 500) {
+                currentIndex = (currentIndex - 1 + messages.length) % messages.length;
+                updateText();
+                lastInteractionTime = now;
+                leftHoverStartTime = -1; // Flag as triggered
+            }
+        } else if (leftHoverStartTime === -1) {
+            leftLoader.visible = false;
         }
     } else {
         leftHoverStartTime = 0;
-        leftLoader.visible = false;
+        if (leftLoader) leftLoader.visible = false;
     }
 
-    if (rightHovering) {
-        if (rightHoverStartTime === 0) rightHoverStartTime = now;
-        const progress = Math.min((now - rightHoverStartTime) / 1000, 1);
-        updateLoader(rightLoader, progress);
-        rightLoader.visible = true;
+    if (rightHovering && rightLoader) {
+        if (rightHoverStartTime === 0) {
+            rightHoverStartTime = now;
+        }
 
-        if (progress >= 1 && now - lastInteractionTime > 500) {
-            currentIndex = (currentIndex + 1) % messages.length;
-            updateText();
-            lastInteractionTime = now;
-            rightHoverStartTime = now + 1000000; // prevent re-trigger
+        if (rightHoverStartTime > 0) {
+            const elapsed = now - rightHoverStartTime;
+            const progress = Math.min(elapsed / 1000, 1);
+            updateLoader(rightLoader, progress);
+            rightLoader.visible = true;
+
+            if (progress >= 1 && now - lastInteractionTime > 500) {
+                currentIndex = (currentIndex + 1) % messages.length;
+                updateText();
+                lastInteractionTime = now;
+                rightHoverStartTime = -1; // Flag as triggered
+            }
+        } else if (rightHoverStartTime === -1) {
+            rightLoader.visible = false;
         }
     } else {
         rightHoverStartTime = 0;
-        rightLoader.visible = false;
+        if (rightLoader) rightLoader.visible = false;
     }
 
     renderer.render(scene, camera);
