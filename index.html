@@ -56,6 +56,9 @@ let rightHoverStartTime = 0;
 let leftLoader, rightLoader;
 const tipPos = new THREE.Vector3();
 const arrowPos = new THREE.Vector3();
+const scratchVec = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
 
 const HAND_CONNECTIONS = [
     [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
@@ -212,17 +215,41 @@ function init() {
 }
 
 function createLoaderMesh() {
-    const mesh = new THREE.Mesh(
-        new THREE.RingGeometry(0.09, 0.1, 32, 1, 0, 0),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8 })
-    );
+    const geometry = new THREE.RingGeometry(0.09, 0.1, 64);
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            uProgress: { value: 0 },
+            uColor: { value: new THREE.Color(0x00ff00) }
+        },
+        vertexShader: `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            varying vec2 vUv;
+            uniform float uProgress;
+            uniform vec3 uColor;
+            void main() {
+                vec2 uv = vUv * 2.0 - 1.0;
+                float a = atan(uv.x, uv.y);
+                float p = a / (2.0 * 3.14159265);
+                if (p < 0.0) p += 1.0;
+                if (p > uProgress) discard;
+                gl_FragColor = vec4(uColor, 0.8);
+            }
+        `,
+        transparent: true
+    });
+    const mesh = new THREE.Mesh(geometry, material);
     return mesh;
 }
 
 function updateLoader(loader, progress) {
-    if (progress > 0) {
-        loader.geometry.dispose();
-        loader.geometry = new THREE.RingGeometry(0.09, 0.1, 32, 1, Math.PI / 2, -progress * 2 * Math.PI);
+    if (loader && loader.material && loader.material.uniforms) {
+        loader.material.uniforms.uProgress.value = progress;
     }
 }
 
@@ -293,18 +320,21 @@ function animate() {
         if (handMarkers[h] && handMarkers[h][8] && handMarkers[h][8].visible) {
             handMarkers[h][8].getWorldPosition(tipPos);
 
-            if (leftArrow) {
-                leftArrow.getWorldPosition(arrowPos);
-                if (tipPos.distanceTo(arrowPos) < 0.2) {
-                    leftHovering = true;
-                }
-            }
+            // Project tipPos to NDC
+            scratchVec.copy(tipPos).project(camera);
+            ndc.set(scratchVec.x, scratchVec.y);
+            raycaster.setFromCamera(ndc, camera);
 
-            if (rightArrow) {
-                rightArrow.getWorldPosition(arrowPos);
-                if (tipPos.distanceTo(arrowPos) < 0.2) {
-                    rightHovering = true;
-                }
+            const targets = [];
+            if (leftArrow) targets.push(leftArrow);
+            if (rightArrow) targets.push(rightArrow);
+
+            if (targets.length > 0) {
+                const intersects = raycaster.intersectObjects(targets);
+                intersects.forEach(hit => {
+                    if (hit.object === leftArrow) leftHovering = true;
+                    if (hit.object === rightArrow) rightHovering = true;
+                });
             }
         }
     }
