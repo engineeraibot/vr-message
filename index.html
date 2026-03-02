@@ -51,6 +51,9 @@ let messagePanel, leftArrow, rightArrow, textMesh;
 let currentIndex = 0;
 const messages = ['hello', 'world', 'welcome', 'to', 'vr'];
 let lastInteractionTime = 0;
+let leftHoverStartTime = 0;
+let rightHoverStartTime = 0;
+let leftLoader, rightLoader;
 
 const HAND_CONNECTIONS = [
     [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
@@ -206,6 +209,34 @@ function init() {
     renderer.setAnimationLoop(animate);
 }
 
+function createLoaderMesh() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const texture = new THREE.CanvasTexture(canvas);
+    const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.12, 0.12),
+        new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false })
+    );
+    mesh.renderOrder = 1;
+    return mesh;
+}
+
+function updateLoader(loader, progress) {
+    const canvas = loader.material.map.image;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (progress > 0) {
+        ctx.beginPath();
+        ctx.arc(64, 64, 50, -Math.PI / 2, -Math.PI / 2 + progress * 2 * Math.PI);
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 10;
+        ctx.stroke();
+    }
+    loader.material.map.needsUpdate = true;
+}
+
 function createMessagePanel() {
     messagePanel = new THREE.Group();
     messagePanel.position.set(0, 0, -1);
@@ -240,6 +271,16 @@ function createMessagePanel() {
     rightArrow.rotation.z = -Math.PI / 2;
     rightArrow.position.set(0.6, 0, 0);
     messagePanel.add(rightArrow);
+
+    leftLoader = createLoaderMesh();
+    leftLoader.position.set(-0.6, 0, 0.02);
+    leftLoader.visible = false;
+    messagePanel.add(leftLoader);
+
+    rightLoader = createLoaderMesh();
+    rightLoader.position.set(0.6, 0, 0.02);
+    rightLoader.visible = false;
+    messagePanel.add(rightLoader);
 }
 
 function updateText() {
@@ -256,30 +297,62 @@ function updateText() {
 
 function animate() {
     const now = Date.now();
-    if (now - lastInteractionTime > 500) {
-        for (let h = 0; h < 2; h++) {
-            if (handMarkers[h] && handMarkers[h][8].visible) {
-                const tipPos = new THREE.Vector3();
-                handMarkers[h][8].getWorldPosition(tipPos);
+    let leftHovering = false;
+    let rightHovering = false;
 
-                const leftPos = new THREE.Vector3();
-                leftArrow.getWorldPosition(leftPos);
-                if (tipPos.distanceTo(leftPos) < 0.15) {
-                    currentIndex = (currentIndex - 1 + messages.length) % messages.length;
-                    updateText();
-                    lastInteractionTime = now;
-                }
+    for (let h = 0; h < 2; h++) {
+        if (handMarkers[h] && handMarkers[h][8].visible) {
+            const tipPos = new THREE.Vector3();
+            handMarkers[h][8].getWorldPosition(tipPos);
 
-                const rightPos = new THREE.Vector3();
-                rightArrow.getWorldPosition(rightPos);
-                if (tipPos.distanceTo(rightPos) < 0.15) {
-                    currentIndex = (currentIndex + 1) % messages.length;
-                    updateText();
-                    lastInteractionTime = now;
-                }
+            const leftPos = new THREE.Vector3();
+            leftArrow.getWorldPosition(leftPos);
+            if (tipPos.distanceTo(leftPos) < 0.15) {
+                leftHovering = true;
+            }
+
+            const rightPos = new THREE.Vector3();
+            rightArrow.getWorldPosition(rightPos);
+            if (tipPos.distanceTo(rightPos) < 0.15) {
+                rightHovering = true;
             }
         }
     }
+
+    if (leftHovering) {
+        if (leftHoverStartTime === 0) leftHoverStartTime = now;
+        const progress = Math.min((now - leftHoverStartTime) / 1000, 1);
+        updateLoader(leftLoader, progress);
+        leftLoader.visible = true;
+
+        if (progress >= 1 && now - lastInteractionTime > 500) {
+            currentIndex = (currentIndex - 1 + messages.length) % messages.length;
+            updateText();
+            lastInteractionTime = now;
+            leftHoverStartTime = now + 1000000; // prevent re-trigger
+        }
+    } else {
+        leftHoverStartTime = 0;
+        leftLoader.visible = false;
+    }
+
+    if (rightHovering) {
+        if (rightHoverStartTime === 0) rightHoverStartTime = now;
+        const progress = Math.min((now - rightHoverStartTime) / 1000, 1);
+        updateLoader(rightLoader, progress);
+        rightLoader.visible = true;
+
+        if (progress >= 1 && now - lastInteractionTime > 500) {
+            currentIndex = (currentIndex + 1) % messages.length;
+            updateText();
+            lastInteractionTime = now;
+            rightHoverStartTime = now + 1000000; // prevent re-trigger
+        }
+    } else {
+        rightHoverStartTime = 0;
+        rightLoader.visible = false;
+    }
+
     renderer.render(scene, camera);
 }
 
