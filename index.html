@@ -47,6 +47,7 @@ let hands;
 let handMarkers = [];
 let handBones = [];
 let videoTexture;
+let processCanvas, processCtx;
 let messagePanel, leftArrow, rightArrow, textMesh;
 let currentIndex = 0;
 const messages = ['hello', 'world', 'welcome', 'to', 'vr'];
@@ -58,6 +59,9 @@ const tipPos = new THREE.Vector3();
 const arrowPos = new THREE.Vector3();
 const scratchVec = new THREE.Vector3();
 const scratchVec2 = new THREE.Vector3();
+const scratchDir = new THREE.Vector3();
+const yAxis = new THREE.Vector3(0, 1, 0);
+const projectionVec = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 
@@ -74,13 +78,18 @@ initHandTracking();
 init();
 
 function initHandTracking() {
+    processCanvas = document.createElement('canvas');
+    processCanvas.width = 256;
+    processCanvas.height = 192; // Maintain 4:3 aspect ratio
+    processCtx = processCanvas.getContext('2d');
+
     // @ts-ignore
     hands = new window.Hands({locateFile: (file) => {
         return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
     }});
     hands.setOptions({
         maxNumHands: 2,
-        modelComplexity: 1,
+        modelComplexity: 0,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
@@ -88,11 +97,15 @@ function initHandTracking() {
 
     const videoElement = document.getElementById('handVideo');
     navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 640, height: 480 }
+        video: { facingMode: 'environment', width: 640, height: 480, frameRate: { ideal: 60 } }
     }).then(stream => {
         videoElement.srcObject = stream;
         videoElement.play();
-        requestAnimationFrame(processVideoFrame);
+        if (videoElement.requestVideoFrameCallback) {
+            videoElement.requestVideoFrameCallback(processVideoFrame);
+        } else {
+            requestAnimationFrame(processVideoFrame);
+        }
     }).catch(err => {
         console.error("Camera access error:", err);
     });
@@ -101,9 +114,14 @@ function initHandTracking() {
 async function processVideoFrame() {
     const videoElement = document.getElementById('handVideo');
     if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-        await hands.send({image: videoElement});
+        processCtx.drawImage(videoElement, 0, 0, processCanvas.width, processCanvas.height);
+        await hands.send({image: processCanvas});
     }
-    requestAnimationFrame(processVideoFrame);
+    if (videoElement.requestVideoFrameCallback) {
+        videoElement.requestVideoFrameCallback(processVideoFrame);
+    } else {
+        requestAnimationFrame(processVideoFrame);
+    }
 }
 
 function onHandResults(results) {
@@ -117,34 +135,33 @@ function onHandResults(results) {
         for (let h = 0; h < results.multiHandLandmarks.length; h++) {
             if (h >= 2) break;
             const landmarks = results.multiHandLandmarks[h];
-            const points = [];
             for (let i = 0; i < 21; i++) {
                 const l = landmarks[i];
                 // Project into VR space relative to camera
-                const p = new THREE.Vector3(
+                projectionVec.set(
                     (l.x - 0.5) * 2.0,
                     (0.5 - l.y) * 1.5,
                     -l.z * 2.0 - 1.0
                 );
-                points.push(p);
-                handMarkers[h][i].position.copy(p);
+                handMarkers[h][i].position.copy(projectionVec);
                 handMarkers[h][i].visible = true;
             }
 
             for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
                 const conn = HAND_CONNECTIONS[i];
-                updateBone(handBones[h][i], points[conn[0]], points[conn[1]]);
+                updateBone(handBones[h][i], handMarkers[h][conn[0]].position, handMarkers[h][conn[1]].position);
             }
         }
     }
 }
 
 function updateBone(bone, p1, p2) {
-    const dir = new THREE.Vector3().subVectors(p2, p1);
-    const length = dir.length();
+    scratchDir.subVectors(p2, p1);
+    const length = scratchDir.length();
     if (length < 0.001) return;
-    bone.position.copy(p1).addScaledVector(dir, 0.5);
-    bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    bone.position.copy(p1).addScaledVector(scratchDir, 0.5);
+    scratchDir.normalize();
+    bone.quaternion.setFromUnitVectors(yAxis, scratchDir);
     bone.scale.set(1, length, 1);
     bone.visible = true;
 }
